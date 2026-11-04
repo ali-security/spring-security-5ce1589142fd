@@ -18,6 +18,7 @@ package org.springframework.security.core.userdetails;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -83,6 +84,6 @@ public class MapReactiveUserDetailsService implements ReactiveUserDetailsService
 	}
 
 	private String getKey(String username) {
-		return username.toLowerCase();
+		return username.toLowerCase(Locale.ROOT);
 	}
 }

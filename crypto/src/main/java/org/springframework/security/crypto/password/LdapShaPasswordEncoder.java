@@ -22,6 +22,7 @@ import org.springframework.security.crypto.keygen.KeyGenerators;
 
 import java.security.MessageDigest;
 import java.util.Base64;
+import java.util.Locale;
 
 /**
  * This {@link PasswordEncoder} is provided for legacy purposes only and is not considered
@@ -50,9 +51,9 @@ public class LdapShaPasswordEncoder implements PasswordEncoder {
 	/** The number of bytes in a SHA hash */
 	private static final int SHA_LENGTH = 20;
 	private static final String SSHA_PREFIX = "{SSHA}";
-	private static final String SSHA_PREFIX_LC = SSHA_PREFIX.toLowerCase();
+	private static final String SSHA_PREFIX_LC = SSHA_PREFIX.toLowerCase(Locale.ENGLISH);
 	private static final String SHA_PREFIX = "{SHA}";
-	private static final String SHA_PREFIX_LC = SHA_PREFIX.toLowerCase();
+	private static final String SHA_PREFIX_LC = SHA_PREFIX.toLowerCase(Locale.ENGLISH);
 
 	// ~ Instance fields
 	// ================================================================================================
