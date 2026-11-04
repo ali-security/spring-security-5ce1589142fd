@@ -17,8 +17,15 @@ package org.springframework.security.crypto.bcrypt;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * JUnit unit tests for BCrypt routines
@@ -352,5 +359,54 @@ public class BCryptTests {
 		assertThat(BCrypt.equalsNoEarlyReturn("", "test")).isFalse();
 
 		assertThat(BCrypt.equalsNoEarlyReturn("test", "pass")).isFalse();
+	}
+
+	@Test
+	public void checkpwWhenZeroRoundsThenMatches() {
+		String password = "$2a$00$9N8N35BVs5TLqGL3pspAte5OWWA2a2aZIs.EGp7At7txYakFERMue";
+		assertThat(BCrypt.checkpw("password", password)).isTrue();
+		assertThat(BCrypt.checkpw("wrong", password)).isFalse();
+	}
+
+	@Test(expected = IllegalArgumentException.class)
+	public void hashpwWhenZeroRoundsThenFails() {
+		BCrypt.hashpw("password", "$2a$00$9N8N35BVs5TLqGL3pspAte5OWWA2a2aZIs.EGp7At7txYakFERMue");
+	}
+
+	// CVE-2022-22976: "1 << 31" overflowed so the maximum work factor performed no
+	// rounds at all and returned the zero-rounds hash instantly
+	@Test
+	public void hashpwWhenMaxLogRoundsThenRoundsAreNotSkipped() throws Exception {
+		String zeroRoundsHash = "$2a$00$9N8N35BVs5TLqGL3pspAte5OWWA2a2aZIs.EGp7At7txYakFERMue";
+		String maxRoundsSalt = "$2a$31$" + zeroRoundsHash.substring(7, 29);
+		assertNotCompletedWithinSeconds(() -> BCrypt.hashpw("password", maxRoundsSalt), 2);
+	}
+
+	// CVE-2022-22976: a stored hash with the maximum work factor must not be
+	// verified with zero rounds
+	@Test
+	public void checkpwWhenMaxLogRoundsThenRoundsAreNotSkipped() throws Exception {
+		String maxRoundsHash = "$2a$31$9N8N35BVs5TLqGL3pspAte5OWWA2a2aZIs.EGp7At7txYakFERMue";
+		assertNotCompletedWithinSeconds(() -> BCrypt.checkpw("password", maxRoundsHash), 2);
+	}
+
+	/**
+	 * 2^31 rounds cannot complete within a unit test, whereas skipping the rounds
+	 * returns immediately. The worker is a daemon thread so it does not keep the JVM
+	 * alive once the tests have finished.
+	 */
+	private static void assertNotCompletedWithinSeconds(Callable<?> task, long seconds) throws Exception {
+		ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
+			Thread thread = new Thread(runnable, "bcrypt-max-log-rounds");
+			thread.setDaemon(true);
+			return thread;
+		});
+		try {
+			Future<?> result = executor.submit(task);
+			assertThatThrownBy(() -> result.get(seconds, TimeUnit.SECONDS)).isInstanceOf(TimeoutException.class);
+		}
+		finally {
+			executor.shutdownNow();
+		}
 	}
 }
