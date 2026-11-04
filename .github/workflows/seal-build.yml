@@ -1,0 +1,25 @@
+name: seal-build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install JDK 8u232
+        run: |
+          curl -fsSL -o /tmp/jdk8.tar.gz https://github.com/AdoptOpenJDK/openjdk8-binaries/releases/download/jdk8u232-b09/OpenJDK8U-jdk_x64_linux_hotspot_8u232b09.tar.gz
+          mkdir -p /tmp/jdk8 && tar -xzf /tmp/jdk8.tar.gz -C /tmp/jdk8 --strip-components=1
+          echo "JAVA_HOME=/tmp/jdk8" >> "$GITHUB_ENV"
+          echo "/tmp/jdk8/bin" >> "$GITHUB_PATH"
+      - name: Build jar
+        run: |
+          java -version
+          ./gradlew --no-daemon :spring-security-core:jar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spring-security-core
+          path: core/build/libs/*.jar

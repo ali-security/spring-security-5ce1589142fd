@@ -1,0 +1,66 @@
+// Seal build: print per-test results, per-module summaries, skip reasons and a grand total
+// so the Travis log states how many tests ran, passed, failed and were skipped (and why).
+import java.util.concurrent.atomic.AtomicLong
+
+def totals = [tests: new AtomicLong(), passed: new AtomicLong(), failed: new AtomicLong(), skipped: new AtomicLong()]
+def skippedLines = Collections.synchronizedList([])
+
+def skipReason = { Test task, TestDescriptor d ->
+    try {
+        def urls = task.classpath.files.collect { it.toURI().toURL() } as URL[]
+        def loader = new URLClassLoader(urls, (ClassLoader) null)
+        try {
+            def cls = Class.forName(d.className, false, loader)
+            def findAnn = { java.lang.reflect.AnnotatedElement el ->
+                for (a in el.annotations) {
+                    def n = a.annotationType().name
+                    if (n == 'org.junit.Ignore' || n == 'org.junit.jupiter.api.Disabled') {
+                        def v = a.annotationType().getMethod('value').invoke(a)
+                        return "${a.annotationType().simpleName}" + (v ? "(\"${v}\")" : '')
+                    }
+                }
+                return null
+            }
+            def methodName = d.name?.replaceAll(/\[.*$/, '')?.replaceAll(/\(.*$/, '')
+            def m = cls.methods.find { it.name == methodName } ?: cls.declaredMethods.find { it.name == methodName }
+            def r = m ? findAnn(m) : null
+            if (r) return "method annotated @${r}"
+            r = findAnn(cls)
+            if (r) return "class annotated @${r}"
+            return 'assumption not met at runtime (Assume/Assumptions)'
+        } finally {
+            loader.close()
+        }
+    } catch (Throwable t) {
+        return "reason not derivable (${t.class.simpleName})"
+    }
+}
+
+allprojects {
+    tasks.withType(Test) { Test task ->
+        task.testLogging {
+            events 'passed', 'skipped', 'failed'
+            exceptionFormat 'full'
+            showStandardStreams = false
+        }
+        task.afterTest { TestDescriptor d, TestResult r ->
+            if (r.resultType == TestResult.ResultType.SKIPPED) {
+                skippedLines << "SKIPPED TEST: ${task.project.name} ${d.className}.${d.name} -- reason: ${skipReason(task, d)}"
+            }
+        }
+        task.afterSuite { TestDescriptor d, TestResult r ->
+            if (d.parent == null) {
+                totals.tests.addAndGet(r.testCount)
+                totals.passed.addAndGet(r.successfulTestCount)
+                totals.failed.addAndGet(r.failedTestCount)
+                totals.skipped.addAndGet(r.skippedTestCount)
+                task.logger.lifecycle("TEST SUMMARY ${task.project.name}:${task.name}: ${r.resultType} tests=${r.testCount} passed=${r.successfulTestCount} failed=${r.failedTestCount} skipped=${r.skippedTestCount}")
+            }
+        }
+    }
+}
+
+gradle.buildFinished {
+    skippedLines.each { println it }
+    println "TEST TOTAL: tests=${totals.tests} passed=${totals.passed} failed=${totals.failed} skipped=${totals.skipped}"
+}
