@@ -100,7 +100,10 @@ public class Encryptors {
 	 * not be shared
 	 * @param salt a hex-encoded, random, site-global salt value to use to generate the
 	 * secret key
+	 * @deprecated This encryptor is not secure. Instead, look to your data store for a
+	 * mechanism to query encrypted data.
 	 */
+	@Deprecated
 	public static TextEncryptor queryableText(CharSequence password, CharSequence salt) {
 		return new HexEncodingTextEncryptor(new AesBytesEncryptor(password.toString(),
 				salt));
